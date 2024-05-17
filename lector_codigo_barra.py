@@ -1,4 +1,4 @@
-import tkinter as tk
+"""import tkinter as tk
 import sqlite3
 
 def leer_codigo_barra():
@@ -23,3 +23,4 @@ leer_button.pack(pady=5)
 
 # Ejecutar la aplicación
 root.mainloop()
+"""
