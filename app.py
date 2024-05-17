@@ -2,8 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
 
-
-
 class ProductCRUD:
     def __init__(self, root):
         self.root = root
@@ -44,6 +42,15 @@ class ProductCRUD:
         self.cantidad_var.set("")
 
     def create_gui(self):
+        # Crear un menú en la barra de menú
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # Menú "Opciones"
+        opciones_menu = tk.Menu(menubar, tearoff=0)
+        opciones_menu.add_command(label="Nueva Interfaz", command=self.abrir_nueva_interfaz)
+        menubar.add_cascade(label="Opciones", menu=opciones_menu)
+
         # Crear un LabelFrame para los campos de entrada
         input_frame = ttk.LabelFrame(self.root, text="Datos del Producto")
         input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
@@ -208,8 +215,6 @@ class ProductCRUD:
         # Actualizar el Treeview para reflejar los cambios
         self.show_data_in_treeview()
 
-
-
     def delete_selected_product(self):
         selected_item = self.tree.selection()
         if not selected_item:
@@ -224,7 +229,7 @@ class ProductCRUD:
                 self.conn.commit()
             messagebox.showinfo("Éxito", "Producto(s) eliminado(s) correctamente.")
             self.show_data_in_treeview()  # Actualizar la vista de Treeview
-            
+
     def procesar_codigo_barras(self):
         # Obtener el código de barras del campo de entrada
         codigo_barras = self.codigo_var.get()
@@ -242,16 +247,33 @@ class ProductCRUD:
                 self.show_data_in_treeview()
             else:
                 messagebox.showerror("Error", "El producto con el código de barras ingresado no existe en la base de datos.")
-    
+
+    def verificar_codigo_barras(self, codigo_barras):
+        # Buscar el producto en la base de datos por código de barras
+        self.cursor.execute("SELECT * FROM productos WHERE codigo_de_barras=?", (codigo_barras,))
+        return self.cursor.fetchone()
+
+    def actualizar_cantidad_producto(self, codigo_barras):
+        # Obtener la cantidad actual del producto
+        self.cursor.execute("SELECT cantidad FROM productos WHERE codigo_de_barras=?", (codigo_barras,))
+        current_quantity = self.cursor.fetchone()[0]
+
+        # Incrementar la cantidad en 1
+        new_quantity = current_quantity + 1
+
+        # Actualizar la cantidad en la base de datos
+        self.cursor.execute("UPDATE productos SET cantidad=? WHERE codigo_de_barras=?", (new_quantity, codigo_barras))
+        self.conn.commit()
+
+    def abrir_nueva_interfaz(self):
+        # Aquí puedes agregar el código para abrir tu nueva interfaz
+        pass
 
     def show_data_in_treeview(self):
         self.tree.delete(*self.tree.get_children())
         self.cursor.execute("SELECT * FROM productos")
         for row in self.cursor.fetchall():
             self.tree.insert("", "end", values=row)
-    
-    
-        
 
 if __name__ == "__main__":
     root = tk.Tk()
