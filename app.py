@@ -2,6 +2,11 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import sqlite3
 from ttkthemes import ThemedStyle
+import os
+from datetime import datetime
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 
 class ProductCRUD:
@@ -42,6 +47,8 @@ class ProductCRUD:
                                 precio REAL,
                                 cantidad INTEGER)''')
         self.conn.commit()
+        
+        
         
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS embases (
                                 id INTEGER PRIMARY KEY,
@@ -128,27 +135,32 @@ class ProductCRUD:
         self.root.grid_columnconfigure(0, weight=1)
         self.root.grid_rowconfigure(0, weight=1)
 
+    def create_widgets(self):
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(pady=10, expand=True)
+
+        self.add_sales_tab(notebook)
+
     def add_sales_tab(self, notebook):
-        # Agregar la pestaña de ventas al cuaderno
         sales_tab = ttk.Frame(notebook)
         notebook.add(sales_tab, text='Ventas')
-        
-        # Variables de control para los campos de entrada
+
+        self.codigo_sales = tk.IntVar()
+        self.total_precio_var = tk.DoubleVar(value=0.0)  # Variable para la suma total de los precios
+
+        tk.Label(sales_tab, text="Código de Barras:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        codigo_entry = tk.Entry(sales_tab, textvariable=self.codigo_sales)
+        codigo_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+        codigo_entry.bind("<Return>", self.process_barcode)
+
+        input_sales_tab = ttk.LabelFrame(sales_tab, text="Datos del Venta")
+        input_sales_tab.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
         self.nombre_sales = tk.StringVar()
         self.marca_sales = tk.StringVar()
         self.precio_sales = tk.DoubleVar()
         self.cantidad_sales = tk.IntVar()
-        self.codigo_sales = tk.IntVar()
-       
-            # Crear una etiqueta y un campo de entrada para el código de barras en la pestaña de ventas
-        tk.Label(sales_tab, text="Código de Barras:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        tk.Entry(sales_tab, textvariable=self.codigo_sales).grid(row=0, column=1, padx=5, pady=5, sticky="w")
-            
-            # Vincular la función de captura al evento de modificación del campo de entrada del código de barras
-            
-        input_sales_tab = ttk.LabelFrame(sales_tab, text="Datos del Venta")
-        input_sales_tab.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
-            
+
         tk.Label(input_sales_tab, text="Nombre:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
         tk.Entry(input_sales_tab, textvariable=self.nombre_sales).grid(row=2, column=1, padx=5, pady=5, sticky="w")
 
@@ -160,33 +172,148 @@ class ProductCRUD:
 
         tk.Label(input_sales_tab, text="Cantidad:").grid(row=5, column=0, padx=5, pady=5, sticky="e")
         tk.Entry(input_sales_tab, textvariable=self.cantidad_sales).grid(row=5, column=1, padx=5, pady=5, sticky="w")
-            
-        # Crear un LabelFrame para los botones CRUD en la pestaña de productos
+
+        # Label para mostrar el total de los precios
+        total_label_frame = ttk.LabelFrame(sales_tab, text="Total Precio")
+        total_label_frame.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+        
+        tk.Label(total_label_frame, text="Total:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        tk.Label(total_label_frame, textvariable=self.total_precio_var).grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
         button_frame_sales_tab = ttk.LabelFrame(sales_tab, text="Acciones")
         button_frame_sales_tab.grid(row=2, column=1, padx=10, pady=10, sticky="nsew")
-            
-        # Botón Limpiar en la pestaña de productos
-        tk.Button(button_frame_sales_tab, text="Limpiar Venta", command=self.limpiar_campos_sales).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
 
-        # Botones CRUD dentro del LabelFrame en la pestaña de productos
+        tk.Button(button_frame_sales_tab, text="Limpiar Venta", command=self.limpiar_campos_sales).grid(row=0, column=0, padx=5, pady=5, sticky="ew")
         tk.Button(button_frame_sales_tab, text="Actualizar Venta", command=self.update_product).grid(row=1, column=0, padx=5, pady=5, sticky="ew")
         tk.Button(button_frame_sales_tab, text="Eliminar Venta", command=self.delete_selected_product).grid(row=2, column=0, padx=5, pady=5, sticky="ew")
+        tk.Button(button_frame_sales_tab, text="Cerrar Venta", command=self.cerrar_venta).grid(row=3, column=0, padx=5, pady=5, sticky="ew")  # Botón para cerrar venta
 
-        # Crear un Treeview para mostrar los datos de ventas en la pestaña de ventas
-        sales_tree = ttk.Treeview(sales_tab, columns=("ID", "Nombre", "Código de Barras", "Marca", "Precio", "Cantidad"))
-        sales_tree.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
-        sales_tree.heading("#0", text="")
-        sales_tree.heading("ID", text="ID")
-        sales_tree.heading("Nombre", text="Nombre")
-        sales_tree.heading("Código de Barras", text="Código de Barras")
-        sales_tree.heading("Marca", text="Marca")
-        sales_tree.heading("Precio", text="Precio")
-        sales_tree.heading("Cantidad", text="Cantidad")
-        sales_tree.column("#0", width=50)  # Configurar la anchura de la columna ID
-        for col in ("Nombre", "Código de Barras", "Marca", "Precio", "Cantidad"):
-            sales_tree.column(col, width=100)  # Configurar la anchura de las otras columnas
-
+        self.sales_tree = ttk.Treeview(sales_tab, columns=("ID", "Nombre", "Código de Barras", "Marca", "Precio", "Cantidad"))
+        self.sales_tree.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
+        self.sales_tree.heading("#0", text="")
+        self.sales_tree.heading("ID", text="ID")
+        self.sales_tree.heading("Nombre", text="Nombre")
+        self.sales_tree.heading("Código de Barras", text="Código de Barras")
+        self.sales_tree.heading("Marca", text="Marca")
+        self.sales_tree.heading("Precio", text="Precio")
+        self.sales_tree.heading("Cantidad", text="Cantidad")
+        self.sales_tree.column("#0", width=50)
         
+        for col in ("Nombre", "Código de Barras", "Marca", "Precio", "Cantidad"):
+            self.sales_tree.column(col, width=100)
+
+
+    def cerrar_venta(self):
+        total_precio = self.total_precio_var.get()
+
+        if total_precio == 0.0:
+            messagebox.showwarning("Venta Vacía", "No hay productos en la venta actual.")
+            return
+
+        # Actualizar la cantidad de productos en la base de datos
+        for item in self.sales_tree.get_children():
+            id = self.sales_tree.item(item, "values")[0]
+            cantidad_vendida = int(self.sales_tree.item(item, "values")[5])
+
+            # Obtener la cantidad actual del producto en la base de datos
+            self.cursor.execute("SELECT cantidad FROM productos WHERE id = ?", (id,))
+            cantidad_actual = self.cursor.fetchone()[0]
+
+            # Calcular la nueva cantidad
+            nueva_cantidad = cantidad_actual - cantidad_vendida
+
+            if nueva_cantidad < 0:
+                messagebox.showwarning("Cantidad Insuficiente", f"No hay suficiente stock para el producto ID {id}.")
+                return
+
+            # Actualizar la cantidad en la base de datos
+            self.cursor.execute("UPDATE productos SET cantidad = ? WHERE id = ?", (nueva_cantidad, id))
+
+        # Confirmar los cambios en la base de datos
+        self.conn.commit()
+        
+        # Generar comprobante PDF
+        self.generar_comprobante_pdf()
+
+        # Limpiar la interfaz para una nueva venta
+        self.sales_tree.delete(*self.sales_tree.get_children())
+        self.total_precio_var.set(0.0)
+        self.limpiar_campos_sales()
+
+        messagebox.showinfo("Venta Cerrada", f"La venta ha sido cerrada. Total: ${total_precio:.2f}")
+    
+    def generar_comprobante_pdf(self):
+        # Crear un nombre de archivo único basado en la fecha y hora actual
+        nombre_archivo = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".pdf"
+
+        # Carpeta donde se guardará el comprobante en el escritorio
+        carpeta_ventas = os.path.join(os.path.expanduser("~"), "Desktop", "ventas")
+
+        # Crear la carpeta si no existe
+        if not os.path.exists(carpeta_ventas):
+            os.makedirs(carpeta_ventas)
+
+        # Carpeta con el nombre de la fecha actual
+        carpeta_fecha_actual = os.path.join(carpeta_ventas, datetime.now().strftime("%Y-%m-%d"))
+
+        # Crear la carpeta si no existe
+        if not os.path.exists(carpeta_fecha_actual):
+            os.makedirs(carpeta_fecha_actual)
+
+        # Ruta completa del archivo PDF
+        ruta_pdf = os.path.join(carpeta_fecha_actual, nombre_archivo)
+
+        # Crear el PDF
+        c = canvas.Canvas(ruta_pdf, pagesize=letter)
+        c.drawString(100, 750, "Comprobante de Venta")
+        c.drawString(100, 730, "Fecha: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        c.drawString(100, 710, "Total Precio: $" + str(self.total_precio_var.get()))
+
+        # Agregar detalle de la venta
+        y_offset = 680
+        for item in self.sales_tree.get_children():
+            nombre = self.sales_tree.item(item, "values")[1]
+            marca = self.sales_tree.item(item, "values")[3]
+            precio = self.sales_tree.item(item, "values")[4]
+            cantidad = self.sales_tree.item(item, "values")[5]
+            detalle = f"Detalle: {nombre}, {marca}, {precio} x {cantidad}"
+            c.drawString(100, y_offset, detalle)
+            y_offset -= 20  # Mover la siguiente línea hacia arriba
+
+        c.save()
+
+        messagebox.showinfo("Comprobante Generado", f"Se ha generado el comprobante: {nombre_archivo} en la carpeta {carpeta_fecha_actual}")
+        
+    def process_barcode(self, event):
+        codigo = self.codigo_sales.get()
+        self.cursor.execute("SELECT * FROM productos WHERE codigo_de_barras = ?", (codigo,))
+        producto = self.cursor.fetchone()
+        
+        if producto:
+            id, nombre, codigo, marca, precio, cantidad = producto
+            for item in self.sales_tree.get_children():
+                if self.sales_tree.item(item, "values")[2] == str(codigo):
+                    current_quantity = int(self.sales_tree.item(item, "values")[5])
+                    new_quantity = current_quantity + 1
+                    self.sales_tree.item(item, values=(id, nombre, codigo, marca, precio, new_quantity))
+                    self.update_total_price()
+                    self.codigo_sales.set("")  # Limpiar el campo de entrada del código
+                    return
+            self.sales_tree.insert("", "end", values=(id, nombre, codigo, marca, precio, 1))
+            self.update_total_price()  # Actualizar el total de precios después de agregar un nuevo producto
+        else:
+            messagebox.showwarning("Código no encontrado", "El código de barras no está en la base de datos.")    
+        
+        self.codigo_sales.set("")  # Limpiar el campo de entrada del código si no se encontró el producto
+
+    def update_total_price(self):
+        total = 0.0
+        for item in self.sales_tree.get_children():
+            precio = float(self.sales_tree.item(item, "values")[4])
+            cantidad = int(self.sales_tree.item(item, "values")[5])
+            total += precio * cantidad
+        self.total_precio_var.set(total)
+
     def limpiar_campos_sales(self):
         # Limpiar los campos de entrada
         self.nombre_sales.set("")
